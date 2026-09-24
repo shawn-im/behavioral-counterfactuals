@@ -1,0 +1,46 @@
+run:
+  output_root: runs/deepseek_r1_0528_qwen3_8b/suggest_wrong/topk_kl_training
+  devices:
+  - cuda:0
+  - cuda:1
+  resume: true
+training:
+  cache_dir: runs/deepseek_r1_0528_qwen3_8b/suggest_wrong/topk_kl_cache
+  model_name: deepseek-ai/DeepSeek-R1-0528-Qwen3-8B
+  layer: 17
+  input_norm_mode: rms
+  directions: both
+  epochs: 1
+  batch_size: 16
+  eval_batch_size: 8
+  forward_batch_size: 8
+  training_support_only_projection: true
+  support_projection_chunk_size: 2048
+  grad_accum_steps: 4
+  log_every_updates: 10
+  log_every_microbatches: 1
+  dtype: bf16
+  seed: 0
+  cache_check_max_rows: 512
+  train_eval_fraction: 0.1
+sweep:
+  learning_rates:
+  - 2.0e-05
+  - 5.0e-05
+  - 0.0001
+  selection_metric: val_recovery
+variants:
+- name: fixed_steering
+  edit_kind: fixed_steering
+  warmup_fraction: 0.1
+- name: directional_linear
+  edit_kind: directional_linear
+  warmup_fraction: 0.1
+- name: edit_module_base_mlp
+  edit_kind: base_mlp
+  warmup_fraction: 0.1
+  primary: true
+final_evaluation:
+  evaluation_split: test
+  max_records: 0
+  response_token_cap: 0

@@ -1,0 +1,92 @@
+run:
+  name: deepseek_suggest_wrong
+  output_dir: runs/deepseek_r1_0528_qwen3_8b/suggest_wrong/counterfactual_analysis
+  seed: 0
+  resume: true
+model:
+  name: deepseek-ai/DeepSeek-R1-0528-Qwen3-8B
+  layer: 17
+  dtype: bf16
+  device: cuda:0
+  devices:
+  - cuda:0
+  - cuda:1
+edit:
+  checkpoint: runs/deepseek_r1_0528_qwen3_8b/suggest_wrong/topk_kl_training/selected/edit_module_base_mlp/model.pt
+  directions: both
+data:
+  scruples_dir: data/scruples/anecdotes
+  cache_dir: runs/deepseek_r1_0528_qwen3_8b/suggest_wrong/topk_kl_cache
+  evaluation_split: test
+  max_examples: 0
+  analysis_response_token_cap: 0
+  static_runs_dir: runs/deepseek_r1_0528_qwen3_8b/suggest_wrong/topk_kl_training
+teacher_forced:
+  enabled: true
+  min_source_kl: 0.0
+  batch_size: 256
+attribution:
+  enabled: true
+  methods:
+  - ig
+  - relp
+  primary_method: ig
+  ig_steps: 16
+  primary_interpretation_mode: teacher_forced
+  modes:
+  - teacher_forced
+  integration_batch_size: 16
+  support_only_projection: true
+  support_projection_chunk_size: 2048
+  max_records: 0
+  qualitative_fraction: 0.01
+ablations:
+  edit_events: true
+  batch_size: 16
+  max_records: 0
+  top_events_per_method: 5
+  random_events_per_method: 5
+  support_only_projection: true
+  support_projection_chunk_size: 2048
+phrases:
+  max_span_tokens: 5
+  top_positive: 20
+  top_negative: 20
+  deduplicate_overlap: true
+native_analysis:
+  enabled: true
+  directions:
+  - c_to_i
+  - i_to_c
+  one_record_per_source_direction: true
+  max_records: 0
+  patch_sites:
+  - question_span
+  - newlines_and_punctuation
+  - question_and_newlines_and_punctuation
+  top_tokens_per_position: 8
+  top_positions_per_record: 20
+  report_examples: 20
+  bootstrap_samples: 1000
+  native_record_batch_size: 2
+  native_condition_batch_size: 16
+exhaustive_validation:
+  enabled: true
+  records: 10
+  ablation_batch_size: 16
+sentence_browser:
+  enabled: true
+  records: 500
+  keywords:
+  - user
+  - suggest
+  - suggested
+  - suggests
+report:
+  generate_html: true
+  attribution_view: comparison
+  primary_attribution_method: ig
+  top_token_fraction: 0.05
+  top_token_limit: 30
+  qualitative_probability_token_limit: 20
+  objective_comparison_path: runs/deepseek_r1_0528_qwen3_8b/suggest_wrong/reconstruction_objective_comparison/test_comparison.json

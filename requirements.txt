@@ -1,0 +1,6 @@
+matplotlib
+numpy>=2,<2.3
+PyYAML
+tqdm
+vllm==0.19.1
+transformers==5.8.0

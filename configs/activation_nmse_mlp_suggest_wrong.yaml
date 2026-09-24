@@ -1,0 +1,26 @@
+run:
+  output_root: runs/gemma4_full/suggest_wrong/activation_nmse_training
+  devices:
+  - cuda:0
+  - cuda:1
+  resume: true
+training:
+  cache_dir: runs/gemma4_full/suggest_wrong/activation_reconstruction_cache
+  model_name: google/gemma-4-E4B-it
+  layer: 20
+  input_norm_mode: rms
+  directions: both
+  epochs: 1
+  batch_size: 4
+  eval_batch_size: 4
+  grad_accum_steps: 16
+  log_every_updates: 10
+  seed: 0
+  train_eval_fraction: 0.1
+  warmup_fraction: 0.1
+sweep:
+  learning_rates:
+  - 2.0e-05
+  - 5.0e-05
+  - 0.0001
+  selection_metric: val_nmse
