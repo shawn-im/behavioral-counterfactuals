@@ -1,8 +1,8 @@
 # Behavioral Counterfactuals
 
 This codebase accompanies *Interpreting Model Reasoning through
-Behavioral Counterfactuals*. The pipeline below generates the experiment
-artifacts and reports from the dataset and model weights. 
+Behavioral Counterfactuals*. The pipeline below runs the experimental workflow 
+and generates artifacts and reports. 
 
 Model paths use Hugging Face IDs. Obtain access to the model repositories and
 authenticate locally if required. Place the Scruples anecdotes dataset which can be
