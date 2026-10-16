@@ -1,11 +1,6 @@
-# Behavioral Counterfactuals
-
-This codebase accompanies *Interpreting Model Reasoning through
-Behavioral Counterfactuals*.
+# Interpreting Model Reasoning through Behavioral Counterfactuals
 
 ## Setup
-
-Requires Python 3.11, Linux, and an NVIDIA GPU.
 
 ```bash
 bash setup.sh
@@ -36,8 +31,7 @@ available GPUs.
 
 ### Prompt preparation
 
-Prepare control and intervention prompts from Scruples. This step is shared by
-both models and preserves the dataset splits (`dev` is used for validation).
+Prepare control and intervention prompts from Scruples. 
 
 ```bash
 SCRUPLES=data/scruples/anecdotes
