@@ -1,44 +1,41 @@
 # Behavioral Counterfactuals
 
 This codebase accompanies *Interpreting Model Reasoning through
-Behavioral Counterfactuals*. The pipeline below runs the experimental workflow 
-and generates artifacts and reports. 
-
-Model paths use Hugging Face IDs. Obtain access to the model repositories and
-authenticate locally if required. Place the Scruples anecdotes dataset which can be
-downloaded at https://github.com/allenai/scruples#data under
-`data/scruples/anecdotes`, or update `SCRUPLES` in the commands below and
-`data.scruples_dir` in the analysis configurations to its location. Choose CUDA
-device indices available on your machine. 
-
-The dataset directory must contain `train.scruples-anecdotes.jsonl`,
-`dev.scruples-anecdotes.jsonl`, and `test.scruples-anecdotes.jsonl`.
-
-The production experiment uses the Scruples anecdotes dataset with the
-`suggest_wrong` intervention. Gemma-4-E4B-it and
-DeepSeek-R1-0528-Qwen3-8B are supported.
+Behavioral Counterfactuals*.
 
 ## Quick Start
 
 Run every command from the repository root. The scripts add the repository to
 `sys.path`; installing the package itself is not required.
 
-Create a CUDA 12.6 environment:
+On a Linux NVIDIA GPU machine with Python 3.11, run:
 
 ```bash
-python3.11 -m venv .venv-cu126
+bash setup.sh
 source .venv-cu126/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements-gpu-cu126.txt
-python -m pip install -r requirements.txt
 ```
+
+Setup installs the CUDA 12.6 dependencies, downloads the official
+[Scruples anecdotes dataset](https://github.com/allenai/scruples#data) into
+`data/scruples/anecdotes`, and checks access to both models using the IDs already
+in the configs. Existing dataset files are preserved. Model weights download on
+first use, not during setup. Use `bash setup.sh gemma` or `bash setup.sh deepseek`
+to check only one model; both use the same environment and dataset.
+
+For Gemma, first accept the terms/request access on its
+[model page](https://huggingface.co/google/gemma-4-E4B-it). Setup prompts for a
+[Hugging Face read token](https://huggingface.co/settings/tokens) without displaying
+it; press Enter to use an existing login or public access. Noninteractive runs
+can supply `HF_TOKEN`. A supplied token is saved in the pipeline's Hugging Face
+cache for subsequent commands, not in the configs. Do not share `.cache/` or
+tokens with your code. Choose available CUDA device indices in the commands below.
 
 Command-line entry points automatically place Hugging Face, vLLM, Triton,
 TorchInductor, CUDA, and pip caches under `.cache/`. Set
 `FAITHFUL_INTERVENTIONS_CACHE_ROOT` before running a script to use a different
-disk. This routing takes effect when a pipeline script starts; it does not
-relocate the preceding installation commands' pip cache. To cache those downloads
-under the repository too, run `export PIP_CACHE_DIR="$PWD/.cache/pip"` before installing.
+disk (set it before setup and keep the same value for subsequent commands).
+Setup also uses this location for pip downloads. An explicitly set `HF_HOME` or
+`PIP_CACHE_DIR` takes precedence for that cache.
 
 ## Pipeline
 
