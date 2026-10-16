@@ -3,47 +3,45 @@
 This codebase accompanies *Interpreting Model Reasoning through
 Behavioral Counterfactuals*.
 
-## Quick Start
+## Setup
 
-Run every command from the repository root. The scripts add the repository to
-`sys.path`; installing the package itself is not required.
-
-On a Linux NVIDIA GPU machine with Python 3.11, run:
+You'll need Python 3.11 and a Linux machine with an NVIDIA GPU. From the
+repository directory, run:
 
 ```bash
 bash setup.sh
 source .venv-cu126/bin/activate
 ```
 
-Setup installs the CUDA 12.6 dependencies, downloads the official
-[Scruples anecdotes dataset](https://github.com/allenai/scruples#data) into
-`data/scruples/anecdotes`, and checks access to both models using the IDs already
-in the configs. Existing dataset files are preserved. Model weights download on
-first use, not during setup. Use `bash setup.sh gemma` or `bash setup.sh deepseek`
-to check only one model; both use the same environment and dataset.
+This installs the dependencies and downloads
+[Scruples](https://github.com/allenai/scruples#data) to `data/scruples/anecdotes`.
+It also checks access to Gemma and DeepSeek; the model names and paths are already
+filled in below. The weights download when you first run a model.
+If you're only using one model, you can run `bash setup.sh gemma` or
+`bash setup.sh deepseek` instead.
 
-For Gemma, first accept the terms/request access on its
-[model page](https://huggingface.co/google/gemma-4-E4B-it). Setup prompts for a
-[Hugging Face read token](https://huggingface.co/settings/tokens) without displaying
-it; press Enter to use an existing login or public access. Noninteractive runs
-can supply `HF_TOKEN`. A supplied token is saved in the pipeline's Hugging Face
-cache for subsequent commands, not in the configs. Do not share `.cache/` or
-tokens with your code. Choose available CUDA device indices in the commands below.
+For Gemma, you'll need to accept the terms on its
+[Hugging Face page](https://huggingface.co/google/gemma-4-E4B-it).
+Setup will ask for a [read token](https://huggingface.co/settings/tokens), which
+is hidden as you type. You can also pass it through `HF_TOKEN`, or press Enter
+to use a login already saved in the pipeline's cache. Setup saves the token for
+later commands, so keep `.cache/` private.
 
-Command-line entry points automatically place Hugging Face, vLLM, Triton,
-TorchInductor, CUDA, and pip caches under `.cache/`. Set
-`FAITHFUL_INTERVENTIONS_CACHE_ROOT` before running a script to use a different
-disk (set it before setup and keep the same value for subsequent commands).
-Setup also uses this location for pip downloads. An explicitly set `HF_HOME` or
-`PIP_CACHE_DIR` takes precedence for that cache.
+Downloads and runtime caches go in `.cache/` by default. To use another disk,
+set `FAITHFUL_INTERVENTIONS_CACHE_ROOT` before setup and keep it set when running
+the experiments. Existing `HF_HOME` and `PIP_CACHE_DIR` settings are respected.
 
-## Pipeline
+## Running the experiments
+
+Follow the steps below in order, choosing the commands for the model you want
+to use. Run them from the repository directory with the environment activated.
+The examples use GPUs 0 and 1; change `--devices` to match your machine.
 
 ### 1. Prepare paired prompts
 
-Prompt preparation is model-independent and preserves the native Scruples
-train/dev/test split. Downstream code exposes `dev` as `val`. Every
-`source_id` has one control and one intervention prompt.
+First, create a control prompt and an intervention prompt for each Scruples
+example. This step is shared by both models and keeps the original dataset
+splits (`dev` becomes `val`).
 
 ```bash
 SCRUPLES=data/scruples/anecdotes
@@ -56,6 +54,8 @@ python scripts/prepare_dataset.py \
 ```
 
 ### 2. Generate responses
+
+Generate responses to both versions of each prompt:
 
 Gemma:
 
@@ -91,9 +91,9 @@ python scripts/generate_responses.py \
 
 ### 3. Build the teacher cache
 
-The cache evaluates every fixed response prefix under both prompts. At each
-response position it stores the union of source top-64, target top-64, and the
-observed response token.
+Next, evaluate the saved responses under both prompts and cache the token
+probabilities used for training. At each position, we keep the top 64 tokens
+from each distribution plus the observed response token.
 
 Gemma:
 
@@ -119,25 +119,12 @@ python scripts/build_topk_kl_distill_cache.py \
   --devices cuda:0 cuda:1
 ```
 
-Completed caches are reused only when their metadata matches the requested
-build.
-
 ### 4. Train and select editors
 
-The production sweep trains three methods at learning rates `2e-5`, `5e-5`,
-and `1e-4`:
-
-| Method | Role |
-| --- | --- |
-| `fixed_steering` | Global-direction sanity check |
-| `directional_linear` | Input-dependent linear sanity check |
-| `edit_module_base_mlp` | Primary per-token residual editor |
-
-Each method is selected by validation recovery. Training never loads the test
-split. The canonical checkpoint is `model.pt`; `last_model.pt` is diagnostic.
-
-Input-dependent editors use per-token RMS normalization only; no normalization
-statistics file or preparation pass is needed.
+These commands train the MLP edit module and the steering-vector and linear
+baselines. Each is trained at learning rates `2e-5`, `5e-5`, and `1e-4`, with
+the best checkpoint chosen by validation KL recovery. The test set is reserved
+for evaluation in step 6.
 
 Gemma:
 
@@ -155,14 +142,13 @@ python scripts/run_topk_kl_training_harness.py \
   --devices cuda:0 cuda:1
 ```
 
-Device arguments override the YAML for that invocation. Resume is enabled, so
-completed runs with matching content fingerprints are reused.
-
+You can change the training settings in the YAML configs. Rerunning a command
+reuses completed runs when their inputs and settings match.
 
 ### 5. Train the activation-reconstruction comparison
 
-Build paired residual activations from the same teacher-cache rows, then train
-the activation-reconstruction MLP. Complete this step before unified evaluation.
+For the activation-reconstruction comparison, first cache the paired activations,
+then train an MLP to reconstruct them. This uses the responses from step 3.
 
 Gemma:
 
@@ -194,13 +180,14 @@ python scripts/run_activation_nmse_training_harness.py \
   --devices cuda:0 cuda:1
 ```
 
-This objective reconstructs paired activations from the final question through
-the response and selects the checkpoint by validation NMSE. Its editor is
-applied at that span during evaluation; the behavior-trained editor is applied
-at all positions. Activation recovery is evaluated on the paired question and
-response positions; behavior recovery is evaluated on response predictions.
+The checkpoint is selected by validation NMSE. This editor acts on the final
+question and response, while the behavior-trained editor acts on all positions.
+We evaluate activation recovery over the question and response, and behavior
+recovery over response predictions.
 
 ### 6. Evaluate the held-out test set
+
+Once both training steps are finished, evaluate the selected checkpoints:
 
 ```bash
 python scripts/evaluate_reconstruction_objectives.py \
@@ -210,11 +197,12 @@ python scripts/evaluate_reconstruction_objectives.py \
 ```
 
 For DeepSeek, use the corresponding `_deepseek_r1_qwen3_8b.yaml` configs for
-both arguments. Both training sweeps must have selected checkpoints, and the
-activation cache must contain the same ordered test rows as the behavior cache.
-Existing selected checkpoints can be used without retraining.
+both arguments. You can rerun evaluation without retraining the models.
 
-### 7. Run interpretation and causal validation
+### 7. Run the analysis
+
+Finally, run attribution, ablation, and activation-patching analyses and build
+the HTML report:
 
 Gemma:
 
@@ -232,22 +220,22 @@ python scripts/run_counterfactual_analysis.py \
   --devices cuda:0 cuda:1
 ```
 
-The resumable stages are:
+The analysis is split into stages:
 
 | Stage | Output |
 | --- | --- |
-| 0 | Validated run manifest |
-| 1 | Teacher-forced traces and fidelity |
-| 2 | Total-response edit-event IG/RelP attribution |
-| 3 | Exact edit-event ablations |
-| 4 | Native activation-patching hypothesis tests |
-| 5 | Exhaustive-token attribution/ablation validation |
-| 6 | Keyword sentence collection and browser |
+| 0 | Prepare the analysis run |
+| 1 | Evaluate edits on fixed responses |
+| 2 | IG and RelP attribution |
+| 3 | Edit ablations |
+| 4 | Native activation patching |
+| 5 | Exhaustive token-level attribution validation |
+| 6 | Keyword sentence browser |
 | 7 | HTML report |
 
-The default runs stages `0-7`. Use `--stages 5,7`
-for exhaustive validation and the report. Add `--force` only when intentionally
-recomputing completed requested stages. A report-only refresh is:
+By default, all stages run, and completed stages are reused when their inputs
+and settings match. Use `--stages` to choose specific stages and `--force` to
+rerun them. For example, to refresh just the Gemma report:
 
 ```bash
 python scripts/run_counterfactual_analysis.py \
@@ -256,3 +244,6 @@ python scripts/run_counterfactual_analysis.py \
   --force
 ```
 
+Open `runs/gemma4_full/suggest_wrong/counterfactual_analysis/report/index.html`
+to view the report. For DeepSeek, replace `gemma4_full` with
+`deepseek_r1_0528_qwen3_8b`.
