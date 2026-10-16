@@ -5,43 +5,39 @@ Behavioral Counterfactuals*.
 
 ## Setup
 
-You'll need Python 3.11 and a Linux machine with an NVIDIA GPU. From the
-repository directory, run:
+Requires Python 3.11, Linux, and an NVIDIA GPU.
 
 ```bash
 bash setup.sh
 source .venv-cu126/bin/activate
 ```
 
-This installs the dependencies and downloads
-[Scruples](https://github.com/allenai/scruples#data) to `data/scruples/anecdotes`.
-It also checks access to Gemma and DeepSeek; the model names and paths are already
-filled in below. The weights download when you first run a model.
-If you're only using one model, you can run `bash setup.sh gemma` or
-`bash setup.sh deepseek` instead.
+`setup.sh` installs dependencies, downloads the
+[Scruples dataset](https://github.com/allenai/scruples#data), and checks model
+access. Use `bash setup.sh gemma` or `bash setup.sh deepseek` to check one model
+only. Model weights are downloaded on first use.
 
-For Gemma, you'll need to accept the terms on its
+Gemma requires accepting the terms on its
 [Hugging Face page](https://huggingface.co/google/gemma-4-E4B-it).
-Setup will ask for a [read token](https://huggingface.co/settings/tokens), which
-is hidden as you type. You can also pass it through `HF_TOKEN`, or press Enter
-to use a login already saved in the pipeline's cache. Setup saves the token for
-later commands, so keep `.cache/` private.
+Enter a [Hugging Face read token](https://huggingface.co/settings/tokens) when
+prompted, set `HF_TOKEN`, or press Enter to use credentials already saved in the
+pipeline's cache. Tokens are stored in the Hugging Face cache, not in the configs.
 
-Downloads and runtime caches go in `.cache/` by default. To use another disk,
-set `FAITHFUL_INTERVENTIONS_CACHE_ROOT` before setup and keep it set when running
-the experiments. Existing `HF_HOME` and `PIP_CACHE_DIR` settings are respected.
+Caches are stored under `.cache/` by default; do not include this directory when
+sharing the code. Set `FAITHFUL_INTERVENTIONS_CACHE_ROOT` before setup and subsequent
+runs to use another location. Existing `HF_HOME` and `PIP_CACHE_DIR` settings take
+precedence for those caches.
 
-## Running the experiments
+## Experiments
 
-Follow the steps below in order, choosing the commands for the model you want
-to use. Run them from the repository directory with the environment activated.
-The examples use GPUs 0 and 1; change `--devices` to match your machine.
+Run commands from the repository root with the environment activated, in the
+order below. Commands are provided for both models. Adjust `--devices` to select
+available GPUs.
 
-### 1. Prepare paired prompts
+### Prompt preparation
 
-First, create a control prompt and an intervention prompt for each Scruples
-example. This step is shared by both models and keeps the original dataset
-splits (`dev` becomes `val`).
+Prepare control and intervention prompts from Scruples. This step is shared by
+both models and preserves the dataset splits (`dev` is used for validation).
 
 ```bash
 SCRUPLES=data/scruples/anecdotes
@@ -53,9 +49,9 @@ python scripts/prepare_dataset.py \
   --seed 0
 ```
 
-### 2. Generate responses
+### Response generation
 
-Generate responses to both versions of each prompt:
+Generate responses for the control and intervention prompts.
 
 Gemma:
 
@@ -89,11 +85,10 @@ python scripts/generate_responses.py \
   --seed 0
 ```
 
-### 3. Build the teacher cache
+### Teacher cache
 
-Next, evaluate the saved responses under both prompts and cache the token
-probabilities used for training. At each position, we keep the top 64 tokens
-from each distribution plus the observed response token.
+Cache token probabilities for the generated responses under both prompts.
+The support is the union of each distribution's top 64 tokens and the observed token.
 
 Gemma:
 
@@ -119,12 +114,11 @@ python scripts/build_topk_kl_distill_cache.py \
   --devices cuda:0 cuda:1
 ```
 
-### 4. Train and select editors
+### Behavior reconstruction
 
-These commands train the MLP edit module and the steering-vector and linear
-baselines. Each is trained at learning rates `2e-5`, `5e-5`, and `1e-4`, with
-the best checkpoint chosen by validation KL recovery. The test set is reserved
-for evaluation in step 6.
+Train the MLP edit module, steering-vector baseline, and linear baseline. The
+configs sweep learning rates `2e-5`, `5e-5`, and `1e-4` and select checkpoints by
+validation KL recovery.
 
 Gemma:
 
@@ -142,13 +136,10 @@ python scripts/run_topk_kl_training_harness.py \
   --devices cuda:0 cuda:1
 ```
 
-You can change the training settings in the YAML configs. Rerunning a command
-reuses completed runs when their inputs and settings match.
+### Activation reconstruction
 
-### 5. Train the activation-reconstruction comparison
-
-For the activation-reconstruction comparison, first cache the paired activations,
-then train an MLP to reconstruct them. This uses the responses from step 3.
+Cache paired activations from the teacher-cache examples, then train the
+activation-reconstruction MLP. Checkpoints are selected by validation NMSE.
 
 Gemma:
 
@@ -180,14 +171,10 @@ python scripts/run_activation_nmse_training_harness.py \
   --devices cuda:0 cuda:1
 ```
 
-The checkpoint is selected by validation NMSE. This editor acts on the final
-question and response, while the behavior-trained editor acts on all positions.
-We evaluate activation recovery over the question and response, and behavior
-recovery over response predictions.
+### Evaluation
 
-### 6. Evaluate the held-out test set
-
-Once both training steps are finished, evaluate the selected checkpoints:
+Evaluate both objectives on the held-out test set after completing both training
+sweeps. The command below uses the Gemma configs.
 
 ```bash
 python scripts/evaluate_reconstruction_objectives.py \
@@ -197,12 +184,12 @@ python scripts/evaluate_reconstruction_objectives.py \
 ```
 
 For DeepSeek, use the corresponding `_deepseek_r1_qwen3_8b.yaml` configs for
-both arguments. You can rerun evaluation without retraining the models.
+both arguments.
 
-### 7. Run the analysis
+### Analysis
 
-Finally, run attribution, ablation, and activation-patching analyses and build
-the HTML report:
+Run attribution, edit ablations, and native activation patching, and generate
+the HTML report.
 
 Gemma:
 
@@ -220,9 +207,7 @@ python scripts/run_counterfactual_analysis.py \
   --devices cuda:0 cuda:1
 ```
 
-The analysis is split into stages:
-
-| Stage | Output |
+| Stage | Analysis |
 | --- | --- |
 | 0 | Prepare the analysis run |
 | 1 | Evaluate edits on fixed responses |
@@ -233,9 +218,8 @@ The analysis is split into stages:
 | 6 | Keyword sentence browser |
 | 7 | HTML report |
 
-By default, all stages run, and completed stages are reused when their inputs
-and settings match. Use `--stages` to choose specific stages and `--force` to
-rerun them. For example, to refresh just the Gemma report:
+Completed stages are reused when inputs and settings match. Use `--stages` to
+select stages and `--force` to rerun them. To regenerate only the Gemma report:
 
 ```bash
 python scripts/run_counterfactual_analysis.py \
